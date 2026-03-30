@@ -1,23 +1,16 @@
-name: Deploy AsciiDoc to GitHub Pages
+name: Build AsciiDoc and Commit to Repo
 
 on:
   push:
     branches:
-      - main # Zmień na master, jeśli takiej nazwy używasz
+      - main # Zmień na master, jeśli tak nazywa się Twój główny branch
 
-# Uprawnienia potrzebne do wdrożenia na GitHub Pages
+# Potrzebujemy uprawnień do zapisu (write), aby móc zrobić push do repozytorium
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Zapobiega nakładaniu się kilku wdrożeń jednocześnie
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  contents: write
 
 jobs:
-  build-and-deploy:
+  build-and-commit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -33,20 +26,21 @@ jobs:
 
       - name: Build AsciiDoc to HTML
         run: |
-          # Tworzymy strukturę katalogów wewnątrz tymczasowego folderu 'build'
-          mkdir -p build/res
+          mkdir -p res
+          # Kompilujemy pliki z docs/ do folderu res/ zachowując strukturę
+          asciidoctor -R docs -D res 'docs/**/*.adoc'
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Kompilujemy pliki zachowując strukturę z folderu docs/ do build/res/
-          asciidoctor -R docs -D build/res 'docs/**/*.adoc'
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Wskazujemy folder build jako źródło strony
-          path: 'build/'
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+          git add res/
+          
+          # Sprawdza czy są jakieś zmiany do zapisania, żeby nie wywalać błędu
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "chore: automatyczna kompilacja AsciiDoc do HTML"
+            git push
+          else
+            echo "Brak nowych zmian do zapisania."
+          fi
