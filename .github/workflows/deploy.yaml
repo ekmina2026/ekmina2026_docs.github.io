@@ -1,16 +1,21 @@
-name: Build AsciiDoc and Commit to Repo
+name: Deploy AsciiDoc to GitHub Pages
 
 on:
   push:
     branches:
-      - main # Zmień na master, jeśli tak nazywa się Twój główny branch
+      - main # Zmień na master, jeśli to Twój główny branch
 
-# Potrzebujemy uprawnień do zapisu (write), aby móc zrobić push do repozytorium
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  build-and-commit:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -24,23 +29,26 @@ jobs:
       - name: Install Asciidoctor
         run: gem install asciidoctor
 
-      - name: Build AsciiDoc to HTML
+      - name: Build AsciiDoc and Create Redirect
         run: |
-          mkdir -p res
-          # Kompilujemy pliki z docs/ do folderu res/ zachowując strukturę
-          asciidoctor -R docs -D res 'docs/**/*.adoc'
+          # 1. Tworzymy folder roboczy 'output' i w nim folder 'res'
+          mkdir -p output/res
+          
+          # 2. Kompilujemy pliki z docs/ do output/res/, zachowując strukturę
+          asciidoctor -R docs -D output/res 'docs/**/*.adoc'
+          
+          # 3. Tworzymy plik index.html w katalogu głównym, który automatycznie 
+          # przekieruje użytkownika do folderu /res/
+          echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=./res/"></head><body>Przekierowywanie do <a href="./res/">folderu res</a>...</body></html>' > output/index.html
 
-      - name: Commit and Push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add res/
-          
-          # Sprawdza czy są jakieś zmiany do zapisania, żeby nie wywalać błędu
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "chore: automatyczna kompilacja AsciiDoc do HTML"
-            git push
-          else
-            echo "Brak nowych zmian do zapisania."
-          fi
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Wysyłamy cały folder output (zawiera index.html oraz folder res/)
+          path: 'output/'
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
